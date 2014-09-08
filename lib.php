@@ -1329,6 +1329,11 @@ class plagiarism_plugin_turnitin extends plagiarism_plugin {
         $fields = 'id, cm, userid, identifier, itemid, similarityscore, grade, submissiontype, orcapable,';
         $fields .= 'student_read, gm_feedback, errorcode';
         if ($submissiondata = $DB->get_record('plagiarism_turnitin_files', array('id' => $submissionid), $fields)) {
+            if ($cm->modname == 'forum') {
+                $gradescheme = $DB->get_field($cm->modname, 'scale', array('id' => $cm->instance));
+            } else {
+                $gradescheme = $DB->get_field($cm->modname, 'grade', array('id' => $cm->instance));
+            }
 
             // Build Plagiarism file object.
             $plagiarismfile = new stdClass();
@@ -1427,7 +1432,8 @@ class plagiarism_plugin_turnitin extends plagiarism_plugin {
                         array('iteminstance' => $cm->instance, 'itemmodule' => $cm->modname,
                             'courseid' => $cm->course, 'itemnumber' => 0));
 
-                    if (!is_null($plagiarismfile->grade) && !empty($gradeitem) && $gbupdaterequired) {
+                    // Only update grade if grading scheme is numeric.
+                    if (!is_null($plagiarismfile->grade) && !empty($gradeitem) && $gbupdaterequired && $gradescheme > 0) {
                         $return = $this->update_grade($cm, $tiisubmission, $submissiondata->userid);
                     }
                 }
@@ -2103,6 +2109,11 @@ class plagiarism_plugin_turnitin extends plagiarism_plugin {
 
                             $currentsubmission = $DB->get_record('plagiarism_turnitin_files', array('externalid' => $tiisubmissionid), 'id, cm, externalid, userid');
                             if ($cm = get_coursemodule_from_id('', $currentsubmission->cm)) {
+                                if ($cm->modname == 'forum') {
+                                    $gradescheme = $DB->get_field($cm->modname, 'scale', array('id' => $cm->instance));
+                                } else {
+                                    $gradescheme = $DB->get_field($cm->modname, 'grade', array('id' => $cm->instance));
+                                }
 
                                 $plagiarismfile = new stdClass();
                                 $plagiarismfile->id = $currentsubmission->id;
@@ -2124,7 +2135,8 @@ class plagiarism_plugin_turnitin extends plagiarism_plugin {
                                 }
 
                                 // at the moment TII doesn't support double marking so we won't synchronise grades from Grade Mark as it would destroy the workflow
-                                if (!is_null($plagiarismfile->grade) && $cm->modname != "coursework") {
+                                // Only update grade if grading scheme is numeric.
+                                if (!is_null($plagiarismfile->grade) && $cm->modname != "coursework" && $gradescheme > 0) {
                                     $this->update_grade($cm, $readsubmission, $currentsubmission->userid);
                                 }
                             }
