@@ -3075,8 +3075,24 @@ function plagiarism_turnitin_send_queued_submissions() {
                         break;
                     }
 
-                    $title = $file->get_filename();
-                    $filename = $file->get_filename();
+                    // Remove any non-ASCII characters from file name.
+                    $filename = preg_replace('/[^\x20-\x7E]/', '', $file->get_filename());
+                    if (strlen($filename) < 1) {
+                        $filename = '--';
+                    }
+                    // Truncate file name to 99 characters if necessary.
+                    if (strlen($filename) > 99) {
+                        // Get a list of all known file types.
+                        $filetypes = get_mimetypes_array();
+                        if (($extension = substr(strrchr($filename, '.'), 1)) && array_key_exists($extension, $filetypes)) {
+                            $basename = substr($filename, 0, -((strlen($extension) + 1)));
+                            $filename = substr($basename, 0, (96 - strlen($extension))) . '...' . $extension;
+                        } else {
+                            $filename = substr($filename, 0, 96) . '...';
+                        }
+                    }
+
+                    $title = $filename;
 
                     try {
                         $textcontent = $file->get_content();
