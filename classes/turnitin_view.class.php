@@ -228,9 +228,8 @@ class turnitin_view {
                 $mform->disabledIf('plagiarism_draft_submit', 'submissiondrafts', 'eq', 0);
             }
 
-            $mform->addElement('select', 'plagiarism_allow_non_or_submissions', get_string("allownonor", "plagiarism_turnitin"), $options);
-            $this->lock($mform, $location, $locks);
-            $mform->addHelpButton('plagiarism_allow_non_or_submissions', 'allownonor', 'plagiarism_turnitin');
+            $mform->addElement('hidden', 'plagiarism_allow_non_or_submissions', 1);
+            $mform->setType('plagiarism_allow_non_or_submissions', PARAM_INT);
 
             $suboptions = array(0 => get_string('norepository', 'plagiarism_turnitin'),
                                 1 => get_string('standardrepository', 'plagiarism_turnitin'));
