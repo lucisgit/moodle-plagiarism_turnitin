@@ -1791,7 +1791,7 @@ class plagiarism_plugin_turnitin extends plagiarism_plugin {
             $assignment->setAnonymousMarking($anonmarking);
         }
 
-        $assignment->setAllowNonOrSubmissions(!empty($modulepluginsettings["plagiarism_allow_non_or_submissions"]) ? 1 : 0);
+        $assignment->setAllowNonOrSubmissions(1);
         $assignment->setTranslatedMatching(!empty($modulepluginsettings["plagiarism_transmatch"]) ? 1 : 0);
 
         // Moodle handles submissions and whether they are allowed so this should always be true.
