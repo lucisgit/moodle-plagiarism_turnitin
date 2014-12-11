@@ -2210,6 +2210,57 @@ class plagiarism_plugin_turnitin extends plagiarism_plugin {
     }
 
     /**
+     * Reduce maximum submission size to 40 MB for Turnitin-enabled file upload assignments.
+     *
+     * @return int Number of assignments updated
+     */
+    public function cron_update_max_file_size() {
+        global $DB;
+
+        $updated = 0;
+
+        $selectsql = "SELECT apc.id
+                        FROM {assign_plugin_config} apc
+                        JOIN {assign} a ON a.id = apc.assignment
+                        JOIN {course_modules} cm ON cm.instance = a.id
+                        JOIN {modules} m ON m.id = cm.module
+                         AND m.name = ?
+                        JOIN {plagiarism_turnitin_config} ptc ON ptc.cm = cm.id
+                         AND ptc.name = ?
+                         AND ptc.value = ?
+                       WHERE apc.plugin = ?
+                         AND apc.subtype = ?
+                         AND apc.name = ?
+                         AND (CAST(apc.value AS int) > ?
+                          OR apc.value = ?)";
+
+        $selectparams = array(
+            'assign',
+            'use_turnitin',
+            '1',
+            'file',
+            'assignsubmission',
+            'maxsubmissionsizebytes',
+            41943040,
+            '0');
+
+        $updatesql = "UPDATE {assign_plugin_config}
+                         SET value = ?";
+
+        $updateparams = array('41943040');
+
+        if ($assignments = $DB->get_fieldset_sql($selectsql, $selectparams)) {
+            foreach ($assignments as $assignment) {
+                if ($DB->execute($updatesql . " WHERE id = $assignment", $updateparams)) {
+                    $updated++;
+                }
+            }
+        }
+
+        return $updated;
+    }
+
+    /**
      * Get a class Id from Turnitin if you only have an assignment id.
      */
     private function get_course_id_from_assignment_id($assignmentid) {
@@ -2927,6 +2978,11 @@ function plagiarism_turnitin_coursemodule_edit_post_actions($data, $course) {
  */
 function plagiarism_turnitin_update_reports() {
     $pluginturnitin = new plagiarism_plugin_turnitin();
+
+    // Seems as good a place as any to call this.
+    mtrace('Reducing maximum submission size to 40 MB for Turnitin-enabled file upload assignments...');
+    mtrace('... ' . $pluginturnitin->cron_update_max_file_size() . ' assignments updated.');
+
     return $pluginturnitin->cron_update_scores();
 }
 
