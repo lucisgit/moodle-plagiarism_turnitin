@@ -1322,7 +1322,7 @@ class plagiarism_plugin_turnitin extends plagiarism_plugin {
     private function update_submission($cm, $submissionid, $tiisubmission) {
         global $DB;
 
-        $return = true;
+        $return = false;
         $updaterequired = false;
 
         $fields = 'id, cm, userid, identifier, itemid, similarityscore, grade, submissiontype, orcapable,';
@@ -1332,6 +1332,50 @@ class plagiarism_plugin_turnitin extends plagiarism_plugin {
                 $gradescheme = $DB->get_field($cm->modname, 'scale', array('id' => $cm->instance));
             } else {
                 $gradescheme = $DB->get_field($cm->modname, 'grade', array('id' => $cm->instance));
+
+                // Get module grade.
+                if ($cm->modname == 'assign') {
+                    $sql = "SELECT grade
+                              FROM {assign_grades}
+                             WHERE assignment = :assignment
+                               AND userid = :userid
+                          ORDER BY id DESC";
+                    $params = array(
+                        'assignment' => $cm->instance,
+                        'userid'     => $submissiondata->userid
+                    );
+                    $modgrade = $DB->get_field_sql($sql, $params, IGNORE_MULTIPLE);
+                } else if ($cm->modname == 'workshop') {
+                    $sql = "SELECT gg.rawgrade
+                              FROM {grade_grades} gg
+                              JOIN {grade_items} gi ON gi.id = gg.itemid
+                               AND gi.iteminstance = :instance
+                               AND gi.itemmodule = :module
+                               AND gi.itemnumber = :number
+                             WHERE gg.userid = :userid";
+                    $params = array(
+                        'instance' => $cm->instance,
+                        'module'   => $cm->modname,
+                        'number'   => 0,
+                        'userid'   => $submissiondata->userid
+                    );
+                    $modgrade = $DB->get_field_sql($sql, $params);
+                }
+                // Check for any other submissions contributing to module grade.
+                $select = "cm = :cmid AND userid = :userid AND externalid <> :externalid AND grade IS NOT NULL";
+                $params = array(
+                    'cmid'       => $cm->id,
+                    'userid'     => $submissiondata->userid,
+                    'externalid' => $submissionid
+                );
+                if ($submissions = $DB->get_records_select('plagiarism_turnitin_files', $select, $params, '', 'grade')) {
+                    // Work out what this submission's module grade contribution should be.
+                    $totalgrade = (count($submissions) + 1) * $modgrade;
+                    foreach ($submissions as $submission) {
+                        $totalgrade = $totalgrade - $submission->grade;
+                    }
+                    $modgrade = round($totalgrade);
+                }
             }
 
             // Build Plagiarism file object.
@@ -1362,6 +1406,7 @@ class plagiarism_plugin_turnitin extends plagiarism_plugin {
             // Identify if an update is required for the similarity score and grade.
             if ($submissiondata->similarityscore != $plagiarismfile->similarityscore ||
                 $submissiondata->grade != $plagiarismfile->grade ||
+                (isset($modgrade) && $modgrade != $plagiarismfile->grade) ||
                 $submissiondata->orcapable != $plagiarismfile->orcapable ||
                 $submissiondata->student_read != $plagiarismfile->student_read ||
                 $submissiondata->gm_feedback != $plagiarismfile->gm_feedback) {
@@ -1447,7 +1492,7 @@ class plagiarism_plugin_turnitin extends plagiarism_plugin {
      */
     private function update_grade($cm, $submission, $userid) {
         global $DB, $USER, $CFG;
-        $return = true;
+        $return = false;
 
         if (!is_null($submission->getGrade()) && $cm->modname != 'forum') {
             // Module grade object.
@@ -1485,7 +1530,7 @@ class plagiarism_plugin_turnitin extends plagiarism_plugin {
                         $gradescounted += 1;
                     }
                 }
-                $grade->grade = (!is_null($averagegrade) && $gradescounted > 0) ? (int)($averagegrade / $gradescounted) : null;
+                $grade->grade = (!is_null($averagegrade) && $gradescounted > 0) ? ($averagegrade / $gradescounted) : null;
             } else {
                 $grade->grade = $submission->getGrade();
             }
@@ -1995,6 +2040,122 @@ class plagiarism_plugin_turnitin extends plagiarism_plugin {
         $updatedata->id = $id;
         $updatedata->duedate_report_refresh = $newvalue;
         $DB->update_record('plagiarism_turnitin_files', $updatedata);
+    }
+
+    /**
+     * This is used to update assignments, specifically post dates in Turnitin which can be changed in Gradebook.
+     */
+    public function cron_update_assignments() {
+        global $DB;
+
+        $time = time();
+        $assignments = $DB->get_records_select('plagiarism_turnitin_config', " name = ? ", array('turnitin_assignid'), 'cm, value');
+
+        foreach ($assignments as $assignment) {
+            $cm = get_coursemodule_from_id('', $assignment->cm);
+
+            if ($cm) {
+                $moduledata = $DB->get_record($cm->modname, array('id' => $cm->instance));
+
+                // Don't update for forums as post date will be start date in this instance as there is no gradebook.
+                if ($cm->modname != 'forum') {
+                    // Get course data, ignore assignment if there is a problem creating course.
+                    $coursedata = $this->get_course_data($cm->id, $cm->course, 'cron');
+                    if (empty($coursedata->turnitin_cid)) {
+                        continue;
+                    }
+
+                    // Only update modules that haven't started yet.
+                    if (!empty($moduledata->allowsubmissionsfromdate)) {
+                        $dtstart = $moduledata->allowsubmissionsfromdate;
+                    } else if (!empty($moduledata->timeavailable)) {
+                        $dtstart = $moduledata->timeavailable;
+                    } else {
+                        $dtstart = $cm->added;
+                    }
+                    $dtstart = ($dtstart <= strtotime('-1 year')) ? strtotime('-11 months') : $dtstart;
+                    if ($dtstart > time()) {
+                        continue;
+                    }
+
+                    if ($plagiarism_post_date = $DB->get_record_select('plagiarism_turnitin_config', " name = ? AND cm = ? ",
+                            array('plagiarism_post_date', $cm->id), 'value')) {
+
+                        // Get due date.
+                        $dtdue = (!empty($moduledata->duedate)) ? $moduledata->duedate : 0;
+
+                        // Ensure due date can't be before start date.
+                        if ($dtdue <= $dtstart) {
+                            $dtdue = strtotime('+1 month', $dtstart);
+                        }
+
+                        $post_date = $plagiarism_post_date->value;
+                        if ($gradeitem = $DB->get_record('grade_items', array(
+                            'iteminstance' => $cm->instance,
+                            'itemmodule' => $cm->modname,
+                            'itemnumber' => 0,
+                            'courseid' => $cm->course
+                        ))) {
+                            // 1 means grade is always hidden, 0 means it's never hidden so we set the post date to 4 weeks
+                            // after the due date. Otherwise there is a hidden until date which we use as the post date.
+                            switch ($gradeitem->hidden) {
+                                case 1:
+                                    // If Turnitin post date is in the next 7 days then push it ahead.
+                                    if ($post_date < (time() + (60 * 60 * 24 * 7)))  {
+                                        $this->sync_tii_assignment($cm, $coursedata->turnitin_cid, "cron");
+                                    }
+                                    break;
+                                case 0:
+                                    // If any grades have been released early via marking workflow, the post date must be in the past.
+                                    if ($cm->modname == 'assign' && !empty($moduledata->markingworkflow)) {
+                                        $gradesreleased = $DB->record_exists('assign_user_flags', array(
+                                            'assignment' => $cm->instance,
+                                            'workflowstate' => 'released'
+                                        ));
+
+                                        if ($gradesreleased) {
+                                            if ($post_date > time()) {
+                                                $this->sync_tii_assignment($cm, $coursedata->turnitin_cid, "cron");
+                                            }
+                                        } else {
+                                            if ($post_date != strtotime('+4 weeks', $dtdue)) {
+                                                $this->sync_tii_assignment($cm, $coursedata->turnitin_cid, "cron");
+                                            }
+                                        }
+                                    } else {
+                                        if ($post_date != strtotime('+4 weeks', $dtdue)) {
+                                            $this->sync_tii_assignment($cm, $coursedata->turnitin_cid, "cron");
+                                        }
+                                    }
+                                    break;
+                                default:
+                                    if ($post_date != $gradeitem->hidden) {
+                                        $this->sync_tii_assignment($cm, $coursedata->turnitin_cid, "cron");
+                                    }
+                                    break;
+                            }
+                        }
+
+                        // Update assignment grades from Turnitin where necessary. Run at midnight only.
+                        if ($dtdue < $time && $post_date > $time && date('H', $time) == '00' && date('i', $time) == '00' &&
+                                $DB->get_field($cm->modname, 'grade', array('id' => $cm->instance)) > 0) {
+                            $select = "cm = :cmid AND externalid IS NOT NULL";
+                            $params = array('cmid' => $cm->id);
+                            $submissions = $DB->get_fieldset_select('plagiarism_turnitin_files', 'externalid', $select, $params);
+                            foreach ($submissions as $submission) {
+                                if ($this->update_grade_from_tii($cm, $submission)) {
+                                    mtrace('Grade updated from TII for submission with Turnitin ID ' . $submission->externalid);
+                                }
+                            }
+                        }
+                    } else {
+                        $this->sync_tii_assignment($cm, $coursedata->turnitin_cid, "cron");
+                    }
+                }
+            }
+        }
+
+        return true;
     }
 
     /**
@@ -2979,7 +3140,13 @@ function plagiarism_turnitin_coursemodule_edit_post_actions($data, $course) {
 function plagiarism_turnitin_update_reports() {
     $pluginturnitin = new plagiarism_plugin_turnitin();
 
-    // Seems as good a place as any to call this.
+    // Seems as good a place as any to call these.
+    try {
+        $pluginturnitin->cron_update_assignments();
+    } catch (Exception $ex) {
+        error_log("Exception in TII cron while updating assigments: ".$ex);
+        mtrace("Exception in TII cron while updating assigments: ".$ex);
+    }
     mtrace('Reducing maximum submission size to 40 MB for Turnitin-enabled file upload assignments...');
     mtrace('... ' . $pluginturnitin->cron_update_max_file_size() . ' assignments updated.');
 
