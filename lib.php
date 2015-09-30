@@ -2225,7 +2225,7 @@ class plagiarism_plugin_turnitin extends plagiarism_plugin {
                        WHERE apc.plugin = ?
                          AND apc.subtype = ?
                          AND apc.name = ?
-                         AND (CAST(apc.value AS int) > ?
+                         AND (CAST(apc.value AS bigint) > ?
                           OR apc.value = ?)";
 
         $selectparams = array(
