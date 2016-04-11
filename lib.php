@@ -990,9 +990,6 @@ class plagiarism_plugin_turnitin extends plagiarism_plugin {
                             $output .= html_writer::tag('div', $notorlink, array('class' => 'row_score pp_origreport '.$useropenclass));
                         }
 
-                        // Check if blind marking is on and revealidentities is not set yet.
-                        $blindon = (!empty($moduledata->blindmarking) && empty($moduledata->revealidentities));
-
                         // Check if a grade exists - as $currentgradequery->grade defaults to -1.
                         $gradeexists = false;
                         if (isset($currentgradequery->grade)) {
@@ -1002,7 +999,7 @@ class plagiarism_plugin_turnitin extends plagiarism_plugin {
                         }
 
                         // Can grade and feedback be released to this student yet?
-                        $released = ((!$blindon) && ($gradesreleased && (!empty($plagiarismfile->gm_feedback) || $gradeexists)));
+                        $released = ($gradesreleased && (!empty($plagiarismfile->gm_feedback) || $gradeexists));
 
                         // Show link to open grademark.
                         if ($config->plagiarism_turnitin_usegrademark && ($istutor || ($linkarray["userid"] == $USER->id && $released))) {
@@ -1904,11 +1901,6 @@ class plagiarism_plugin_turnitin extends plagiarism_plugin {
                     $dtpost = ($gradesreleased) ? time() : $dtpost;
                 }
             }
-        }
-
-        // If blind marking is being used and identities have not been revealed then push out post date.
-        if ($cm->modname == 'assign' && !empty($moduledata->blindmarking) && empty($moduledata->revealidentities)) {
-            $dtpost = strtotime('+6 months');
         }
 
         // If blind marking is being used for coursework then push out post date.
