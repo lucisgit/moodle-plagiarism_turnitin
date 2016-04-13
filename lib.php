@@ -1476,8 +1476,12 @@ class plagiarism_plugin_turnitin extends plagiarism_plugin {
                     // Only update grade if grading scheme is numeric.
                     if (!is_null($plagiarismfile->grade) && !empty($gradeitem) && $gbupdaterequired && $gradescheme > 0) {
                         $return = $this->update_grade($cm, $tiisubmission, $submissiondata->userid);
+                    } else {
+                        $return = true;
                     }
                 }
+            } else {
+                $return = true;
             }
         }
 
