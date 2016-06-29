@@ -998,25 +998,6 @@ class plagiarism_plugin_turnitin extends plagiarism_plugin {
                             }
                         }
 
-                        // Can grade and feedback be released to this student yet?
-                        $released = ((!$blindon) && ($gradesreleased && (!empty($plagiarismfile->gm_feedback) || $gradeexists)));
-
-                        // Show link to open grademark.
-                        if ($config->plagiarism_turnitin_usegrademark && ($istutor || ($linkarray["userid"] == $USER->id && $released))) {
-
-                            // Output grademark icon.
-                            $gmicon = html_writer::tag('div', $OUTPUT->pix_icon('icon-edit',
-                                                                get_string('grademark', 'plagiarism_turnitin'), 'plagiarism_turnitin'),
-                                                    array('title' => get_string('grademark', 'plagiarism_turnitin'),
-                                                        'class' => 'pp_grademark_open tii_tooltip grademark_'.$plagiarismfile->externalid.
-                                                                        '_'.$linkarray["cmid"], 'tabindex' => '0', 'role' => 'link'
-                                                    ));
-
-                            // Put in div placeholder for DV launch form.
-                            $gmicon .= html_writer::tag('div', '', array('class' => 'launch_form grademark_form_'.$plagiarismfile->externalid));
-                            $output .= html_writer::tag('div', $gmicon, array('class' => 'grade_icon'));
-                        }
-
                         // Indicate whether student has viewed the feedback.
                         if ($istutor) {
                             $readicon = "--";
