@@ -1002,7 +1002,8 @@ class plagiarism_plugin_turnitin extends plagiarism_plugin {
                         $released = ($gradesreleased && (!empty($plagiarismfile->gm_feedback) || $gradeexists));
 
                         // Show link to open grademark.
-                        if ($config->plagiarism_turnitin_usegrademark && ($istutor || ($linkarray["userid"] == $USER->id && $released))) {
+                        if ($config->plagiarism_turnitin_usegrademark && ($istutor || ($linkarray["userid"] == $USER->id && $released))
+                                && $plagiarismfile->lastmodified < 1472684400) { // Don't show GM icon for 16/17 submissions.
 
                             // Output grademark icon.
                             $gmicon = html_writer::tag('div', $OUTPUT->pix_icon('icon-edit',
