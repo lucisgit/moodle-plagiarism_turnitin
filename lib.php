@@ -2169,10 +2169,10 @@ class plagiarism_plugin_turnitin extends plagiarism_plugin {
 
         $submissions = $DB->get_records_select(
             'plagiarism_turnitin_files',
-            'statuscode = ? 
+            '(statuscode = ? OR (statuscode = ? AND similarityscore IS NOT NULL))
             AND ( similarityscore IS NULL OR duedate_report_refresh = 1 )
             AND ( orcapable = ? OR orcapable IS NULL ) ',
-            array('success', 1),
+            array('success', 'error', 1),
             'externalid DESC'
         );
 
@@ -2278,6 +2278,12 @@ class plagiarism_plugin_turnitin extends plagiarism_plugin {
                                 $plagiarismfile->id = $currentsubmission->id;
                                 $plagiarismfile->externalid = $tiisubmissionid;
                                 $plagiarismfile->similarityscore = (is_numeric($readsubmission->getOverallSimilarity())) ? $readsubmission->getOverallSimilarity() : null;
+                                // Reset any previous error status for submissions that have a similarity score.
+                                if (!is_null($plagiarismfile->similarityscore)) {
+                                    $plagiarismfile->statuscode = 'success';
+                                    $plagiarismfile->errorcode = null;
+                                    $plagiarismfile->errormsg = null;
+                                }
                                 $plagiarismfile->grade = (is_numeric($readsubmission->getGrade())) ? $readsubmission->getGrade() : null;
                                 $plagiarismfile->orcapable = ($readsubmission->getOriginalityReportCapable() == 1) ? 1 : 0;
                                 $plagiarismfile->transmatch = 0;
@@ -2351,8 +2357,12 @@ class plagiarism_plugin_turnitin extends plagiarism_plugin {
         global $DB;
         $currentsubmission = $DB->get_record('plagiarism_turnitin_files',
             array('externalid' => $missingsubmission),
-            'id, cm, externalid, userid'
+            'id, cm, externalid, userid, similarityscore'
         );
+        // Don't invalidate submissions that already have a similarity score.
+        if (!is_null($currentsubmission->similarityscore)) {
+            return;
+        }
         $plagiarismfile = new stdClass();
         $plagiarismfile->id = $currentsubmission->id;
         $plagiarismfile->externalid = $currentsubmission->externalid;
