@@ -2378,7 +2378,7 @@ class plagiarism_plugin_turnitin extends plagiarism_plugin {
     }
 
     /**
-     * Reduce maximum submission size to 40 MB for Turnitin-enabled file upload assignments.
+     * Reduce maximum submission size to 100 MB for Turnitin-enabled file upload assignments.
      *
      * @return int Number of assignments updated
      */
@@ -2409,13 +2409,13 @@ class plagiarism_plugin_turnitin extends plagiarism_plugin {
             'file',
             'assignsubmission',
             'maxsubmissionsizebytes',
-            41943040,
+            104857600,
             '0');
 
         $updatesql = "UPDATE {assign_plugin_config}
                          SET value = ?";
 
-        $updateparams = array('41943040');
+        $updateparams = array('104857600');
 
         if ($assignments = $DB->get_fieldset_sql($selectsql, $selectparams)) {
             foreach ($assignments as $assignment) {
@@ -3154,7 +3154,7 @@ function plagiarism_turnitin_update_reports() {
         error_log("Exception in TII cron while updating assigments: ".$ex);
         mtrace("Exception in TII cron while updating assigments: ".$ex);
     }
-    mtrace('Reducing maximum submission size to 40 MB for Turnitin-enabled file upload assignments...');
+    mtrace('Reducing maximum submission size to 100 MB for Turnitin-enabled file upload assignments...');
     mtrace('... ' . $pluginturnitin->cron_update_max_file_size() . ' assignments updated.');
 
     return $pluginturnitin->cron_update_scores();
